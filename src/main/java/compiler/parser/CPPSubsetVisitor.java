@@ -236,6 +236,13 @@ public interface CPPSubsetVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitUnaryOp(CPPSubsetParser.UnaryOpContext ctx);
 	/**
+	 * Visit a parse tree produced by the {@code postfixOp}
+	 * labeled alternative in {@link CPPSubsetParser#unaryExpr}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitPostfixOp(CPPSubsetParser.PostfixOpContext ctx);
+	/**
 	 * Visit a parse tree produced by the {@code primary}
 	 * labeled alternative in {@link CPPSubsetParser#unaryExpr}.
 	 * @param ctx the parse tree
@@ -310,4 +317,11 @@ public interface CPPSubsetVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitBoolLit(CPPSubsetParser.BoolLitContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code stringLit}
+	 * labeled alternative in {@link CPPSubsetParser#literal}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitStringLit(CPPSubsetParser.StringLitContext ctx);
 }

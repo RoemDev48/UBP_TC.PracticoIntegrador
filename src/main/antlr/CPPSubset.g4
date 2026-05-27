@@ -27,6 +27,7 @@ typeSpecifier
     | 'double'
     | 'void'
     | 'bool'
+    | 'string'
     ;
 
 // Declaración de funciones
@@ -120,8 +121,9 @@ multiplicativeExpr
     ;
 
 unaryExpr
-    : op=('+' | '-' | '!' | '&' | '*') unaryExpr           #unaryOp
-    | primaryExpr                                          #primary
+    : op=('++' | '--' | '+' | '-' | '!' | '&' | '*') unaryExpr           #unaryOp
+    | primaryExpr op=('++' | '--')                                       #postfixOp
+    | primaryExpr                                                        #primary
     ;
 
 primaryExpr
@@ -144,6 +146,7 @@ literal
     | DOUBLE_LITERAL                           #doubleLit
     | CHAR_LITERAL                             #charLit
     | BOOLEAN_LITERAL                          #boolLit
+    | STRING_LITERAL                           #stringLit
     ;
 
 // --- REGLAS LÉXICAS ---
@@ -153,6 +156,7 @@ INT_LITERAL : [0-9]+ ;
 DOUBLE_LITERAL : [0-9]+ '.' [0-9]+ ;
 CHAR_LITERAL : '\'' ( ~['\\\r\n] | '\\' [nrt'\\0] ) '\'' ;
 BOOLEAN_LITERAL : 'true' | 'false' ;
+STRING_LITERAL : '"' ( ~["\\\r\n] | '\\' [btnfr"'\\] )* '"' ;
 
 // Identificadores
 IDENTIFIER : [a-zA-Z_] [a-zA-Z0-9_]* ;

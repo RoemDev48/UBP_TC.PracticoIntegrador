@@ -3,14 +3,15 @@ package compiler.ast;
 import compiler.visitor.ASTVisitor;
 
 /**
- * Nodo que representa un valor literal constante (int, double, char, bool).
+ * Nodo que representa un valor literal constante (int, double, char, bool, string).
  */
 public class LiteralNode extends ASTNode {
     public enum LiteralType {
         INT,
         DOUBLE,
         CHAR,
-        BOOL
+        BOOL,
+        STRING
     }
 
     private final String value;

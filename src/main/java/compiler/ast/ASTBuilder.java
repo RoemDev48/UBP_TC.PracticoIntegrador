@@ -386,4 +386,16 @@ public class ASTBuilder extends CPPSubsetBaseVisitor<compiler.ast.ASTNode> {
     public compiler.ast.ASTNode visitBoolLit(CPPSubsetParser.BoolLitContext ctx) {
         return new LiteralNode(ctx.BOOLEAN_LITERAL().getText(), LiteralNode.LiteralType.BOOL, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
     }
+
+    @Override
+    public compiler.ast.ASTNode visitPostfixOp(CPPSubsetParser.PostfixOpContext ctx) {
+        String op = ctx.op.getText();
+        compiler.ast.ASTNode expr = visit(ctx.primaryExpr());
+        return new UnaryOpNode(op, expr, true, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
+    }
+
+    @Override
+    public compiler.ast.ASTNode visitStringLit(CPPSubsetParser.StringLitContext ctx) {
+        return new LiteralNode(ctx.STRING_LITERAL().getText(), LiteralNode.LiteralType.STRING, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
+    }
 }

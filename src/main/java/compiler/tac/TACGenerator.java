@@ -441,12 +441,77 @@ public class TACGenerator implements ASTVisitor<String> {
 
     @Override
     public String visit(UnaryOpNode node) {
+        String op = node.getOperator();
+
+        if (op.equals("++") || op.equals("--")) {
+            ASTNode lhs = node.getExpression();
+            String val = lhs.accept(this);
+            
+            // Si es postfijo sobre IdNode, debemos salvar el valor original en un temporal
+            String tempOrigVal = null;
+            if (lhs instanceof IdNode && node.isPostfix()) {
+                tempOrigVal = newTemp();
+                emit(new TACInstruction(
+                    TACInstruction.Type.ASSIGN,
+                    "=",
+                    val,
+                    null,
+                    tempOrigVal
+                ));
+            }
+
+            String tempNewVal = newTemp();
+
+            // tempNewVal = val + 1 o val - 1
+            emit(new TACInstruction(
+                TACInstruction.Type.BINARY_OP,
+                op.equals("++") ? "+" : "-",
+                val,
+                "1",
+                tempNewVal
+            ));
+
+            // Escribir el nuevo valor de vuelta al L-Value correspondientemente
+            if (lhs instanceof IdNode) {
+                emit(new TACInstruction(
+                    TACInstruction.Type.ASSIGN,
+                    "=",
+                    tempNewVal,
+                    null,
+                    ((IdNode) lhs).getIdentifier()
+                ));
+            } else if (lhs instanceof ArrayAccessNode) {
+                ArrayAccessNode arrayAccess = (ArrayAccessNode) lhs;
+                String idxVal = arrayAccess.getIndex().accept(this);
+                emit(new TACInstruction(
+                    TACInstruction.Type.ASSIGN,
+                    "=",
+                    tempNewVal,
+                    null,
+                    arrayAccess.getArrayName() + "[" + idxVal + "]"
+                ));
+            } else if (lhs instanceof DereferenceNode) {
+                DereferenceNode deref = (DereferenceNode) lhs;
+                String ptrVal = deref.getExpression().accept(this);
+                emit(new TACInstruction(
+                    TACInstruction.Type.ASSIGN,
+                    "=",
+                    tempNewVal,
+                    null,
+                    "*" + ptrVal
+                ));
+            }
+
+            // Postfijo devuelve el valor original (el temporal salvado para IdNode o val para otros), prefijo devuelve el nuevo valor
+            return node.isPostfix() ? (tempOrigVal != null ? tempOrigVal : val) : tempNewVal;
+        }
+
         String val = node.getExpression().accept(this);
         String temp = newTemp();
 
         emit(new TACInstruction(
             TACInstruction.Type.UNARY_OP, 
-            node.getOperator(), 
+            op, 
             val, 
             null, 
             temp

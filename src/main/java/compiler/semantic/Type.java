@@ -13,7 +13,8 @@ public class Type {
         CHAR,
         BOOL,
         VOID,
-        ERROR
+        ERROR,
+        STRING
     }
 
     private final Kind kind;
@@ -28,6 +29,7 @@ public class Type {
     public static final Type BOOL = new Type(Kind.BOOL, 0, false, 0);
     public static final Type VOID = new Type(Kind.VOID, 0, false, 0);
     public static final Type ERROR = new Type(Kind.ERROR, 0, false, 0);
+    public static final Type STRING = new Type(Kind.STRING, 0, false, 0);
 
     public Type(Kind kind, int pointerDepth, boolean isArray, int arraySize) {
         this.kind = kind;
@@ -109,6 +111,7 @@ public class Type {
             case "char": return CHAR;
             case "bool": return BOOL;
             case "void": return VOID;
+            case "string": return STRING;
             default: return ERROR;
         }
     }

@@ -517,8 +517,36 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
 
     @Override
     public Type visit(UnaryOpNode node) {
-        Type exprType = node.getExpression().accept(this);
         String op = node.getOperator();
+
+        // Si el operador es ++ o --, necesitamos validar que sea un L-Value modificable
+        if (op.equals("++") || op.equals("--")) {
+            ASTNode expr = node.getExpression();
+            boolean isLValue = (expr instanceof IdNode) || (expr instanceof ArrayAccessNode) || (expr instanceof DereferenceNode);
+            if (!isLValue) {
+                reportError(node, "El operando del operador '" + op + "' debe ser una dirección de memoria modificable (L-Value).");
+                return Type.ERROR;
+            }
+            
+            Type exprType = expr.accept(this);
+            if (exprType == Type.ERROR) {
+                return Type.ERROR;
+            }
+            
+            if (!exprType.isNumeric() && !exprType.isPointer()) {
+                reportError(node, "El operando del operador '" + op + "' debe ser de tipo numérico o puntero.");
+                return Type.ERROR;
+            }
+            
+            // Marcar como inicializada
+            if (expr instanceof IdNode) {
+                initializedVars.add(((IdNode) expr).getIdentifier());
+            }
+            
+            return exprType;
+        }
+
+        Type exprType = node.getExpression().accept(this);
 
         if (exprType == Type.ERROR) {
             return Type.ERROR;
@@ -550,6 +578,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
             case DOUBLE: return Type.DOUBLE;
             case CHAR: return Type.CHAR;
             case BOOL: return Type.BOOL;
+            case STRING: return Type.STRING;
             default: return Type.ERROR;
         }
     }
