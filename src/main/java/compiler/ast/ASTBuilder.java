@@ -99,31 +99,7 @@ public class ASTBuilder extends CPPSubsetBaseVisitor<compiler.ast.ASTNode> {
      * Construye un L-Value válido a partir del contexto sintáctico lvalue.
      */
     private compiler.ast.ASTNode buildLValue(CPPSubsetParser.LvalueContext ctx) {
-        // Contar asteriscos (operación de indirección en asignación, ej: *ptr = 5)
-        int pointerDepth = 0;
-        for (int i = 0; i < ctx.getChildCount(); i++) {
-            if (ctx.getChild(i).getText().equals("*")) {
-                pointerDepth++;
-            }
-        }
-
-        String id = ctx.IDENTIFIER().getText();
-        compiler.ast.ASTNode node;
-
-        // Comprobar si accede a un elemento de un arreglo
-        if (ctx.expression() != null) {
-            compiler.ast.ASTNode index = visit(ctx.expression());
-            node = new ArrayAccessNode(id, index, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
-        } else {
-            node = new IdNode(id, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
-        }
-
-        // Envolver el nodo en DereferenceNodes si tiene asteriscos
-        for (int i = 0; i < pointerDepth; i++) {
-            node = new DereferenceNode(node, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
-        }
-
-        return node;
+        return visit(ctx.unaryExpr());
     }
 
     @Override
@@ -330,13 +306,22 @@ public class ASTBuilder extends CPPSubsetBaseVisitor<compiler.ast.ASTNode> {
     }
 
     @Override
-    public compiler.ast.ASTNode visitIdentifierOrArray(CPPSubsetParser.IdentifierOrArrayContext ctx) {
+    public compiler.ast.ASTNode visitMemberAccess(CPPSubsetParser.MemberAccessContext ctx) {
+        compiler.ast.ASTNode base = visit(ctx.primaryExpr());
+        String memberName = ctx.IDENTIFIER().getText();
+        return new MemberAccessNode(base, memberName, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
+    }
+
+    @Override
+    public compiler.ast.ASTNode visitArrayAccess(CPPSubsetParser.ArrayAccessContext ctx) {
+        String arrayName = ctx.IDENTIFIER().getText();
+        compiler.ast.ASTNode index = visit(ctx.expression());
+        return new ArrayAccessNode(arrayName, index, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
+    }
+
+    @Override
+    public compiler.ast.ASTNode visitId(CPPSubsetParser.IdContext ctx) {
         String id = ctx.IDENTIFIER().getText();
-        // Cargar un elemento de arreglo, o retornar variable simple
-        if (ctx.expression() != null) {
-            compiler.ast.ASTNode index = visit(ctx.expression());
-            return new ArrayAccessNode(id, index, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
-        }
         return new IdNode(id, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
     }
 
@@ -397,5 +382,40 @@ public class ASTBuilder extends CPPSubsetBaseVisitor<compiler.ast.ASTNode> {
     @Override
     public compiler.ast.ASTNode visitStringLit(CPPSubsetParser.StringLitContext ctx) {
         return new LiteralNode(ctx.STRING_LITERAL().getText(), LiteralNode.LiteralType.STRING, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
+    }
+
+    @Override
+    public compiler.ast.ASTNode visitStructDeclaration(CPPSubsetParser.StructDeclarationContext ctx) {
+        String structName = ctx.IDENTIFIER().getText();
+        List<VarDeclNode> members = new ArrayList<>();
+        if (ctx.structMemberDeclaration() != null) {
+            for (CPPSubsetParser.StructMemberDeclarationContext mCtx : ctx.structMemberDeclaration()) {
+                members.add((VarDeclNode) visit(mCtx));
+            }
+        }
+        return new StructDeclNode(structName, members, ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
+    }
+
+    @Override
+    public compiler.ast.ASTNode visitStructMemberDeclaration(CPPSubsetParser.StructMemberDeclarationContext ctx) {
+        String type = ctx.typeSpecifier().getText();
+        String id = ctx.IDENTIFIER().getText();
+        
+        int pointerDepth = 0;
+        for (int i = 0; i < ctx.getChildCount(); i++) {
+            if (ctx.getChild(i).getText().equals("*")) {
+                pointerDepth++;
+            }
+        }
+        
+        boolean isArray = false;
+        int arraySize = 0;
+        if (ctx.INT_LITERAL() != null) {
+            isArray = true;
+            arraySize = Integer.parseInt(ctx.INT_LITERAL().getText());
+        }
+        
+        return new VarDeclNode(type, id, null, pointerDepth, isArray, arraySize, 
+                              ctx.getStart().getLine(), ctx.getStart().getCharPositionInLine());
     }
 }

@@ -14,10 +14,12 @@ public class Type {
         BOOL,
         VOID,
         ERROR,
-        STRING
+        STRING,
+        STRUCT
     }
 
     private final Kind kind;
+    private final String structName;
     private final int pointerDepth;
     private final boolean isArray;
     private final int arraySize;
@@ -32,7 +34,12 @@ public class Type {
     public static final Type STRING = new Type(Kind.STRING, 0, false, 0);
 
     public Type(Kind kind, int pointerDepth, boolean isArray, int arraySize) {
+        this(kind, null, pointerDepth, isArray, arraySize);
+    }
+
+    public Type(Kind kind, String structName, int pointerDepth, boolean isArray, int arraySize) {
         this.kind = kind;
+        this.structName = structName;
         this.pointerDepth = pointerDepth;
         this.isArray = isArray;
         this.arraySize = arraySize;
@@ -40,6 +47,10 @@ public class Type {
 
     public Kind getKind() {
         return kind;
+    }
+
+    public String getStructName() {
+        return structName;
     }
 
     public int getPointerDepth() {
@@ -71,33 +82,24 @@ public class Type {
      */
     public Type makePointer() {
         if (kind == Kind.ERROR) return ERROR;
-        return new Type(kind, pointerDepth + 1, false, 0);
+        return new Type(kind, structName, pointerDepth + 1, false, 0);
     }
 
-    /**
-     * Retorna el tipo apuntado (desreferenciación).
-     */
     public Type dereference() {
         if (kind == Kind.ERROR) return ERROR;
         if (pointerDepth <= 0) return ERROR;
-        return new Type(kind, pointerDepth - 1, false, 0);
+        return new Type(kind, structName, pointerDepth - 1, false, 0);
     }
 
-    /**
-     * Retorna un tipo arreglo de este tipo.
-     */
     public Type makeArray(int size) {
         if (kind == Kind.ERROR) return ERROR;
-        return new Type(kind, pointerDepth, true, size);
+        return new Type(kind, structName, pointerDepth, true, size);
     }
 
-    /**
-     * Retorna el tipo de los elementos del arreglo.
-     */
     public Type getElementType() {
         if (kind == Kind.ERROR) return ERROR;
         if (!isArray) return ERROR;
-        return new Type(kind, pointerDepth, false, 0);
+        return new Type(kind, structName, pointerDepth, false, 0);
     }
 
     /**
@@ -112,7 +114,9 @@ public class Type {
             case "bool": return BOOL;
             case "void": return VOID;
             case "string": return STRING;
-            default: return ERROR;
+            default:
+                // Es un nombre de struct
+                return new Type(Kind.STRUCT, typeStr, 0, false, 0);
         }
     }
 
@@ -215,19 +219,24 @@ public class Type {
         return pointerDepth == type.pointerDepth &&
                isArray == type.isArray &&
                arraySize == type.arraySize &&
-               kind == type.kind;
+               kind == type.kind &&
+               Objects.equals(structName, type.structName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(kind, pointerDepth, isArray, arraySize);
+        return Objects.hash(kind, structName, pointerDepth, isArray, arraySize);
     }
 
     @Override
     public String toString() {
         if (kind == Kind.ERROR) return "ERROR";
         StringBuilder sb = new StringBuilder();
-        sb.append(kind);
+        if (kind == Kind.STRUCT) {
+            sb.append(structName);
+        } else {
+            sb.append(kind);
+        }
         for (int i = 0; i < pointerDepth; i++) {
             sb.append("*");
         }

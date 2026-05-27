@@ -23,6 +23,18 @@ public interface CPPSubsetVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitDeclaration(CPPSubsetParser.DeclarationContext ctx);
 	/**
+	 * Visit a parse tree produced by {@link CPPSubsetParser#structDeclaration}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitStructDeclaration(CPPSubsetParser.StructDeclarationContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link CPPSubsetParser#structMemberDeclaration}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitStructMemberDeclaration(CPPSubsetParser.StructMemberDeclarationContext ctx);
+	/**
 	 * Visit a parse tree produced by {@link CPPSubsetParser#variableDeclaration}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
@@ -250,12 +262,12 @@ public interface CPPSubsetVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitPrimary(CPPSubsetParser.PrimaryContext ctx);
 	/**
-	 * Visit a parse tree produced by the {@code identifierOrArray}
+	 * Visit a parse tree produced by the {@code memberAccess}
 	 * labeled alternative in {@link CPPSubsetParser#primaryExpr}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
 	 */
-	T visitIdentifierOrArray(CPPSubsetParser.IdentifierOrArrayContext ctx);
+	T visitMemberAccess(CPPSubsetParser.MemberAccessContext ctx);
 	/**
 	 * Visit a parse tree produced by the {@code lit}
 	 * labeled alternative in {@link CPPSubsetParser#primaryExpr}.
@@ -264,19 +276,33 @@ public interface CPPSubsetVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitLit(CPPSubsetParser.LitContext ctx);
 	/**
-	 * Visit a parse tree produced by the {@code funcCall}
-	 * labeled alternative in {@link CPPSubsetParser#primaryExpr}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitFuncCall(CPPSubsetParser.FuncCallContext ctx);
-	/**
 	 * Visit a parse tree produced by the {@code parenthesized}
 	 * labeled alternative in {@link CPPSubsetParser#primaryExpr}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
 	 */
 	T visitParenthesized(CPPSubsetParser.ParenthesizedContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code arrayAccess}
+	 * labeled alternative in {@link CPPSubsetParser#primaryExpr}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitArrayAccess(CPPSubsetParser.ArrayAccessContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code id}
+	 * labeled alternative in {@link CPPSubsetParser#primaryExpr}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitId(CPPSubsetParser.IdContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code funcCall}
+	 * labeled alternative in {@link CPPSubsetParser#primaryExpr}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitFuncCall(CPPSubsetParser.FuncCallContext ctx);
 	/**
 	 * Visit a parse tree produced by {@link CPPSubsetParser#functionCall}.
 	 * @param ctx the parse tree

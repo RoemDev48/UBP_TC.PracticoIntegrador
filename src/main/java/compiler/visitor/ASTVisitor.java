@@ -31,4 +31,8 @@ public interface ASTVisitor<T> {
     T visit(ArrayAccessNode node);
     T visit(DereferenceNode node);
     T visit(AddressOfNode node);
+    
+    // Firmas para la Fase 3: Estructuras
+    T visit(StructDeclNode node);
+    T visit(MemberAccessNode node);
 }

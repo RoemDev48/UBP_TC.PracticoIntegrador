@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Visitante del AST encargado del análisis semántico con soporte extendido (Fase 6).
@@ -15,6 +17,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
     private Type currentFunctionReturnType;
     private int loopNestingLevel;
     private Set<String> initializedVars;
+    private final Map<String, List<VarDeclNode>> structRegistry;
     
     private final List<String> errors;
     private final List<String> warnings;
@@ -26,6 +29,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
         this.errors = new ArrayList<>();
         this.warnings = new ArrayList<>();
         this.initializedVars = new HashSet<>();
+        this.structRegistry = new HashMap<>();
     }
 
     public List<String> getErrors() {
@@ -91,7 +95,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
         }
 
         // Construir el tipo complejo (punteros y arreglos)
-        Type varType = new Type(baseType.getKind(), node.getPointerDepth(), node.isArray(), node.getArraySize());
+        Type varType = new Type(baseType.getKind(), baseType.getStructName(), node.getPointerDepth(), node.isArray(), node.getArraySize());
 
         // Registrar en el ámbito actual
         Symbol varSym = new Symbol(node.getIdentifier(), varType);
@@ -142,7 +146,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
                 reportError(param, "El parámetro '" + param.getIdentifier() + "' en la función '" + node.getIdentifier() + "' no puede ser 'void'.");
                 pBase = Type.ERROR;
             }
-            Type pType = new Type(pBase.getKind(), param.getPointerDepth(), false, 0);
+            Type pType = new Type(pBase.getKind(), pBase.getStructName(), param.getPointerDepth(), false, 0);
             paramTypes.add(pType);
         }
 
@@ -199,7 +203,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
     @Override
     public Type visit(ParameterNode node) {
         Type base = Type.fromString(node.getType());
-        return new Type(base.getKind(), node.getPointerDepth(), false, 0);
+        return new Type(base.getKind(), base.getStructName(), node.getPointerDepth(), false, 0);
     }
 
     @Override
@@ -233,17 +237,16 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
     public Type visit(AssignNode node) {
         // Validar el L-Value del lado izquierdo
         ASTNode lhs = node.getLhs();
-        boolean isLValue = (lhs instanceof IdNode) || (lhs instanceof ArrayAccessNode) || (lhs instanceof DereferenceNode);
+        boolean isLValue = (lhs instanceof IdNode) || (lhs instanceof ArrayAccessNode) || (lhs instanceof DereferenceNode) || (lhs instanceof MemberAccessNode);
         if (!isLValue) {
             reportError(node, "El lado izquierdo de la asignación debe ser una dirección de memoria modificable (L-Value).");
             return Type.ERROR;
         }
 
-        // Si el LHS es un IdNode, temporalmente pretendemos que está inicializado para evitar el warning
+        // Si el LHS tiene una variable base, temporalmente pretendemos que está inicializada para evitar warnings de lectura de L-Value
         boolean tempInitialized = false;
-        String lhsId = null;
-        if (lhs instanceof IdNode) {
-            lhsId = ((IdNode) lhs).getIdentifier();
+        String lhsId = getBaseIdentifier(lhs);
+        if (lhsId != null) {
             if (!initializedVars.contains(lhsId)) {
                 initializedVars.add(lhsId);
                 tempInitialized = true;
@@ -279,6 +282,8 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
                 @Override public Boolean visit(ArrayAccessNode n) { return false; }
                 @Override public Boolean visit(DereferenceNode n) { return false; }
                 @Override public Boolean visit(AddressOfNode n) { return false; }
+                @Override public Boolean visit(StructDeclNode n) { return false; }
+                @Override public Boolean visit(MemberAccessNode n) { return false; }
                 
                 @Override
                 public Boolean visit(IdNode n) {
@@ -298,9 +303,9 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
             }
         }
 
-        // Si el LHS es una variable (IdNode), marcarla como inicializada permanentemente
-        if (lhs instanceof IdNode) {
-            initializedVars.add(((IdNode) lhs).getIdentifier());
+        // Si el LHS tiene una variable base, marcarla como inicializada permanentemente
+        if (lhsId != null) {
+            initializedVars.add(lhsId);
         }
 
         return lhsType;
@@ -522,7 +527,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
         // Si el operador es ++ o --, necesitamos validar que sea un L-Value modificable
         if (op.equals("++") || op.equals("--")) {
             ASTNode expr = node.getExpression();
-            boolean isLValue = (expr instanceof IdNode) || (expr instanceof ArrayAccessNode) || (expr instanceof DereferenceNode);
+            boolean isLValue = (expr instanceof IdNode) || (expr instanceof ArrayAccessNode) || (expr instanceof DereferenceNode) || (expr instanceof MemberAccessNode);
             if (!isLValue) {
                 reportError(node, "El operando del operador '" + op + "' debe ser una dirección de memoria modificable (L-Value).");
                 return Type.ERROR;
@@ -539,8 +544,9 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
             }
             
             // Marcar como inicializada
-            if (expr instanceof IdNode) {
-                initializedVars.add(((IdNode) expr).getIdentifier());
+            String baseId = getBaseIdentifier(expr);
+            if (baseId != null) {
+                initializedVars.add(baseId);
             }
             
             return exprType;
@@ -702,16 +708,15 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
         ASTNode expr = node.getExpression();
         
         // El operador & solo se puede aplicar sobre un L-Value válido (variable en memoria)
-        boolean isLValue = (expr instanceof IdNode) || (expr instanceof ArrayAccessNode) || (expr instanceof DereferenceNode);
+        boolean isLValue = (expr instanceof IdNode) || (expr instanceof ArrayAccessNode) || (expr instanceof DereferenceNode) || (expr instanceof MemberAccessNode);
         if (!isLValue) {
             reportError(node, "Operador de dirección '&' solo se puede aplicar sobre una dirección de memoria modificable (L-Value).");
             return Type.ERROR;
         }
 
         boolean tempInitialized = false;
-        String exprId = null;
-        if (expr instanceof IdNode) {
-            exprId = ((IdNode) expr).getIdentifier();
+        String exprId = getBaseIdentifier(expr);
+        if (exprId != null) {
             if (!initializedVars.contains(exprId)) {
                 initializedVars.add(exprId);
                 tempInitialized = true;
@@ -758,5 +763,70 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
         }
         
         return false;
+    }
+
+    @Override
+    public Type visit(StructDeclNode node) {
+        if (structRegistry.containsKey(node.getStructName())) {
+            reportError(node, "Redeclaración de la estructura '" + node.getStructName() + "'.");
+        } else {
+            structRegistry.put(node.getStructName(), node.getMembers());
+        }
+        return Type.VOID;
+    }
+
+    @Override
+    public Type visit(MemberAccessNode node) {
+        Type baseType = node.getExpression().accept(this);
+        if (baseType == Type.ERROR) {
+            return Type.ERROR;
+        }
+
+        if (baseType.getKind() != Type.Kind.STRUCT || baseType.isPointer() || baseType.isArray()) {
+            reportError(node, "El operador '.' sólo se puede aplicar sobre una estructura directa (no sobre " + baseType + ").");
+            return Type.ERROR;
+        }
+
+        List<VarDeclNode> members = structRegistry.get(baseType.getStructName());
+        if (members == null) {
+            reportError(node, "Estructura '" + baseType.getStructName() + "' no definida.");
+            return Type.ERROR;
+        }
+
+        VarDeclNode memberDecl = null;
+        for (VarDeclNode member : members) {
+            if (member.getIdentifier().equals(node.getMemberName())) {
+                memberDecl = member;
+                break;
+            }
+        }
+
+        if (memberDecl == null) {
+            reportError(node, "La estructura '" + baseType.getStructName() + "' no contiene un miembro llamado '" + node.getMemberName() + "'.");
+            return Type.ERROR;
+        }
+
+        Type memberBaseType = Type.fromString(memberDecl.getType());
+        return new Type(memberBaseType.getKind(), memberBaseType.getStructName(), memberDecl.getPointerDepth(), memberDecl.isArray(), memberDecl.getArraySize());
+    }
+
+    /**
+     * Helper para obtener recursivamente el identificador base de un L-Value (p.x -> p, arr[i] -> arr, etc.)
+     */
+    private String getBaseIdentifier(ASTNode node) {
+        if (node == null) return null;
+        if (node instanceof IdNode) {
+            return ((IdNode) node).getIdentifier();
+        }
+        if (node instanceof MemberAccessNode) {
+            return getBaseIdentifier(((MemberAccessNode) node).getExpression());
+        }
+        if (node instanceof ArrayAccessNode) {
+            return ((ArrayAccessNode) node).getArrayName();
+        }
+        if (node instanceof DereferenceNode) {
+            return getBaseIdentifier(((DereferenceNode) node).getExpression());
+        }
+        return null;
     }
 }

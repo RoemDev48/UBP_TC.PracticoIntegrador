@@ -9,6 +9,15 @@ program
 declaration
     : variableDeclaration
     | functionDeclaration
+    | structDeclaration
+    ;
+
+structDeclaration
+    : 'struct' IDENTIFIER '{' structMemberDeclaration+ '}' ';'
+    ;
+
+structMemberDeclaration
+    : typeSpecifier '*'* IDENTIFIER ('[' INT_LITERAL ']')? ';'
     ;
 
 // Declaración de variables (soporta múltiples declaradores y ahora punteros/arreglos)
@@ -28,6 +37,7 @@ typeSpecifier
     | 'void'
     | 'bool'
     | 'string'
+    | IDENTIFIER
     ;
 
 // Declaración de funciones
@@ -60,7 +70,7 @@ assignmentStatement
     ;
 
 lvalue
-    : '*'* IDENTIFIER ('[' expression ']')?
+    : unaryExpr
     ;
 
 compoundStatement
@@ -127,10 +137,12 @@ unaryExpr
     ;
 
 primaryExpr
-    : IDENTIFIER ('[' expression ']')?                     #identifierOrArray
-    | literal                                              #lit
-    | functionCall                                         #funcCall
-    | '(' expression ')'                                   #parenthesized
+    : primaryExpr '.' IDENTIFIER                                             #memberAccess
+    | IDENTIFIER '[' expression ']'                                          #arrayAccess
+    | IDENTIFIER                                                             #id
+    | literal                                                                #lit
+    | functionCall                                                           #funcCall
+    | '(' expression ')'                                                     #parenthesized
     ;
 
 functionCall

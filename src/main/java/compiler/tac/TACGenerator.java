@@ -152,6 +152,17 @@ public class TACGenerator implements ASTVisitor<String> {
                 null, 
                 "*" + ptrVal
             ));
+        } else if (lhs instanceof MemberAccessNode) {
+            MemberAccessNode memberAccess = (MemberAccessNode) lhs;
+            String baseVal = memberAccess.getExpression().accept(this);
+            String val = node.getExpression().accept(this);
+            emit(new TACInstruction(
+                TACInstruction.Type.ASSIGN, 
+                "=", 
+                val, 
+                null, 
+                baseVal + "." + memberAccess.getMemberName()
+            ));
         }
         return null;
     }
@@ -500,6 +511,16 @@ public class TACGenerator implements ASTVisitor<String> {
                     null,
                     "*" + ptrVal
                 ));
+            } else if (lhs instanceof MemberAccessNode) {
+                MemberAccessNode memberAccess = (MemberAccessNode) lhs;
+                String baseVal = memberAccess.getExpression().accept(this);
+                emit(new TACInstruction(
+                    TACInstruction.Type.ASSIGN,
+                    "=",
+                    tempNewVal,
+                    null,
+                    baseVal + "." + memberAccess.getMemberName()
+                ));
             }
 
             // Postfijo devuelve el valor original (el temporal salvado para IdNode o val para otros), prefijo devuelve el nuevo valor
@@ -597,6 +618,26 @@ public class TACGenerator implements ASTVisitor<String> {
             TACInstruction.Type.UNARY_OP,
             "&",
             varVal,
+            null,
+            temp
+        ));
+        return temp;
+    }
+
+    @Override
+    public String visit(StructDeclNode node) {
+        // La declaración de una estructura no genera instrucciones en tiempo de ejecución.
+        return null;
+    }
+
+    @Override
+    public String visit(MemberAccessNode node) {
+        String baseVal = node.getExpression().accept(this);
+        String temp = newTemp();
+        emit(new TACInstruction(
+            TACInstruction.Type.ASSIGN,
+            "=",
+            baseVal + "." + node.getMemberName(),
             null,
             temp
         ));

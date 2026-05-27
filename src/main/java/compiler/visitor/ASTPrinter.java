@@ -326,4 +326,37 @@ public class ASTPrinter implements ASTVisitor<String> {
         indentLevel--;
         return sb.toString();
     }
+
+    @Override
+    public String visit(StructDeclNode node) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(getHeader(node, "StructDeclNode [Struct: " + node.getStructName() + "]"));
+        sb.append("\n");
+        indentLevel++;
+        
+        sb.append(indent()).append("|- Members:\n");
+        indentLevel++;
+        if (node.getMembers().isEmpty()) {
+            sb.append(indent()).append("+- (None)\n");
+        } else {
+            for (VarDeclNode member : node.getMembers()) {
+                sb.append(member.accept(this)).append("\n");
+            }
+            if (sb.charAt(sb.length() - 1) == '\n') sb.deleteCharAt(sb.length() - 1);
+        }
+        indentLevel--;
+        indentLevel--;
+        return sb.toString();
+    }
+
+    @Override
+    public String visit(MemberAccessNode node) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(getHeader(node, "MemberAccessNode [Member: " + node.getMemberName() + "]"));
+        sb.append("\n");
+        indentLevel++;
+        sb.append(node.getExpression().accept(this));
+        indentLevel--;
+        return sb.toString();
+    }
 }
