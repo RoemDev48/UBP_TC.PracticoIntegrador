@@ -4,6 +4,8 @@ import compiler.ast.*;
 import compiler.visitor.ASTVisitor;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 
 /**
  * Visitante del AST encargado del análisis semántico con soporte extendido (Fase 6).
@@ -12,6 +14,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
     private Scope currentScope;
     private Type currentFunctionReturnType;
     private int loopNestingLevel;
+    private Set<String> initializedVars;
     
     private final List<String> errors;
     private final List<String> warnings;
@@ -22,6 +25,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
         this.loopNestingLevel = 0;
         this.errors = new ArrayList<>();
         this.warnings = new ArrayList<>();
+        this.initializedVars = new HashSet<>();
     }
 
     public List<String> getErrors() {
@@ -111,6 +115,11 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
             }
         }
 
+        // Si tiene inicializador o es una variable global, considerarla inicializada
+        if (node.hasInitializer() || currentScope.getParent() == null) {
+            initializedVars.add(node.getIdentifier());
+        }
+
         return Type.VOID;
     }
 
@@ -163,13 +172,24 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
                 if (!paramDefined) {
                     reportError(param, "Nombre de parámetro duplicado '" + param.getIdentifier() + "' en la función '" + node.getIdentifier() + "'.");
                 }
+                initializedVars.add(param.getIdentifier());
             }
         }
 
         // Analizar cuerpo de la función
         node.getBody().accept(this);
 
+        // Verificación de garantía de retorno para funciones no-void
+        if (returnType.getKind() != Type.Kind.VOID || returnType.isPointer()) {
+            if (!hasGuaranteedReturn(node.getBody())) {
+                reportError(node, "La función no-void '" + node.getIdentifier() + "' debe retornar un valor en todos sus caminos de ejecución.");
+            }
+        }
+
         // Cerrar ámbito de la función
+        for (String symName : currentScope.getSymbols().keySet()) {
+            initializedVars.remove(symName);
+        }
         currentScope = currentScope.getParent();
         currentFunctionReturnType = null;
 
@@ -185,11 +205,26 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
     @Override
     public Type visit(BlockNode node) {
         currentScope = new Scope(currentScope);
+        boolean flowTerminated = false;
+        
         for (ASTNode stmt : node.getStatements()) {
-            if (stmt != null) {
-                stmt.accept(this);
+            if (stmt == null) continue;
+            
+            if (flowTerminated) {
+                reportWarning(stmt, "Código inalcanzable (código muerto) detectado.");
+            }
+            
+            stmt.accept(this);
+            
+            if (hasGuaranteedReturn(stmt) || stmt instanceof BreakNode || stmt instanceof ContinueNode || stmt instanceof ReturnNode) {
+                flowTerminated = true;
             }
         }
+        
+        for (String symName : currentScope.getSymbols().keySet()) {
+            initializedVars.remove(symName);
+        }
+        
         currentScope = currentScope.getParent();
         return Type.VOID;
     }
@@ -204,8 +239,24 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
             return Type.ERROR;
         }
 
+        // Si el LHS es un IdNode, temporalmente pretendemos que está inicializado para evitar el warning
+        boolean tempInitialized = false;
+        String lhsId = null;
+        if (lhs instanceof IdNode) {
+            lhsId = ((IdNode) lhs).getIdentifier();
+            if (!initializedVars.contains(lhsId)) {
+                initializedVars.add(lhsId);
+                tempInitialized = true;
+            }
+        }
+
         Type lhsType = lhs.accept(this);
         Type rhsType = node.getExpression().accept(this);
+
+        // Si agregamos temporalmente el identificador, lo removemos ahora
+        if (tempInitialized && lhsId != null) {
+            initializedVars.remove(lhsId);
+        }
 
         if (lhsType != Type.ERROR && rhsType != Type.ERROR) {
             if (lhs.accept(new ASTVisitor<Boolean>() {
@@ -247,6 +298,11 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
             }
         }
 
+        // Si el LHS es una variable (IdNode), marcarla como inicializada permanentemente
+        if (lhs instanceof IdNode) {
+            initializedVars.add(((IdNode) lhs).getIdentifier());
+        }
+
         return lhsType;
     }
 
@@ -258,8 +314,30 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
                 reportError(node.getCondition(), "La condición del 'if' no puede ser de tipo 'void'.");
             }
         }
+
+        Set<String> thenSet = new java.util.HashSet<>(initializedVars);
+        Set<String> elseSet = new java.util.HashSet<>(initializedVars);
+        Set<String> oldInitializedVars = this.initializedVars;
+
+        this.initializedVars = thenSet;
         if (node.getThenBranch() != null) node.getThenBranch().accept(this);
-        if (node.hasElseBranch()) node.getElseBranch().accept(this);
+
+        if (node.hasElseBranch()) {
+            this.initializedVars = elseSet;
+            node.getElseBranch().accept(this);
+
+            // Intersección de variables inicializadas en ambas ramas
+            oldInitializedVars.clear();
+            for (String var : thenSet) {
+                if (elseSet.contains(var)) {
+                    oldInitializedVars.add(var);
+                }
+            }
+        } else {
+            // Sin else, no hay garantía de inicialización tras el if
+        }
+
+        this.initializedVars = oldInitializedVars;
         return Type.VOID;
     }
 
@@ -271,9 +349,16 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
                 reportError(node.getCondition(), "La condición del 'while' no puede ser de tipo 'void'.");
             }
         }
+
+        Set<String> loopSet = new java.util.HashSet<>(initializedVars);
+        Set<String> oldInitializedVars = this.initializedVars;
+
+        this.initializedVars = loopSet;
         loopNestingLevel++;
         if (node.getBody() != null) node.getBody().accept(this);
         loopNestingLevel--;
+
+        this.initializedVars = oldInitializedVars;
         return Type.VOID;
     }
 
@@ -281,16 +366,29 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
     public Type visit(ForNode node) {
         currentScope = new Scope(currentScope);
         if (node.getInitialization() != null) node.getInitialization().accept(this);
+        
+        Set<String> preLoopSet = new java.util.HashSet<>(initializedVars);
+
         if (node.getCondition() != null) {
             Type condType = node.getCondition().accept(this);
             if (condType != Type.ERROR && condType.getKind() == Type.Kind.VOID) {
                 reportError(node.getCondition(), "La condición del 'for' no puede ser de tipo 'void'.");
             }
         }
+
+        Set<String> loopSet = new java.util.HashSet<>(preLoopSet);
+        this.initializedVars = loopSet;
+
         if (node.getIncrement() != null) node.getIncrement().accept(this);
         loopNestingLevel++;
         if (node.getBody() != null) node.getBody().accept(this);
         loopNestingLevel--;
+
+        this.initializedVars = preLoopSet;
+
+        for (String symName : currentScope.getSymbols().keySet()) {
+            initializedVars.remove(symName);
+        }
         currentScope = currentScope.getParent();
         return Type.VOID;
     }
@@ -467,6 +565,12 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
             reportError(node, "El identificador '" + node.getIdentifier() + "' es una función, no una variable escalar.");
             return Type.ERROR;
         }
+        
+        // Detección de variables no inicializadas
+        if (!initializedVars.contains(node.getIdentifier())) {
+            reportWarning(node, "La variable '" + node.getIdentifier() + "' podría no estar inicializada al usarse.");
+        }
+        
         return sym.getType();
     }
 
@@ -523,6 +627,11 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
 
         Type arrType = sym.getType();
         
+        // Si no es un arreglo estático (sino un puntero escalar) y no está inicializado, reportar warning
+        if (!arrType.isArray() && !initializedVars.contains(node.getArrayName())) {
+            reportWarning(node, "El puntero '" + node.getArrayName() + "' podría no estar inicializado al usarse.");
+        }
+
         // C++ permite indexación sobre arreglos y sobre punteros escalares (aritmética de punteros implicita)
         if (!arrType.isArray() && !arrType.isPointer()) {
             reportError(node, "La variable '" + node.getArrayName() + "' no es un arreglo ni un puntero, por lo que no puede ser indexada.");
@@ -570,11 +679,55 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
             return Type.ERROR;
         }
 
+        boolean tempInitialized = false;
+        String exprId = null;
+        if (expr instanceof IdNode) {
+            exprId = ((IdNode) expr).getIdentifier();
+            if (!initializedVars.contains(exprId)) {
+                initializedVars.add(exprId);
+                tempInitialized = true;
+            }
+        }
+
         Type exprType = expr.accept(this);
+
+        if (tempInitialized && exprId != null) {
+            initializedVars.remove(exprId);
+        }
+
         if (exprType == Type.ERROR) {
             return Type.ERROR;
         }
 
         return exprType.makePointer();
+    }
+
+    /**
+     * Helper recursivo para determinar si un nodo del AST garantiza que se ejecute una sentencia 'return'.
+     */
+    private boolean hasGuaranteedReturn(ASTNode node) {
+        if (node == null) return false;
+        
+        if (node instanceof ReturnNode) {
+            return true;
+        }
+        
+        if (node instanceof BlockNode) {
+            for (ASTNode stmt : ((BlockNode) node).getStatements()) {
+                if (hasGuaranteedReturn(stmt)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        if (node instanceof IfNode) {
+            IfNode ifNode = (IfNode) node;
+            return ifNode.hasElseBranch() 
+                && hasGuaranteedReturn(ifNode.getThenBranch()) 
+                && hasGuaranteedReturn(ifNode.getElseBranch());
+        }
+        
+        return false;
     }
 }
