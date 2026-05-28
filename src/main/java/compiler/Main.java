@@ -11,6 +11,7 @@ import compiler.tac.TACInstruction;
 import compiler.utils.CompilerErrorListener;
 import compiler.utils.ConsoleColor;
 import compiler.visitor.ASTPrinter;
+import compiler.codegen.*;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.Token;
@@ -154,6 +155,41 @@ public class Main {
             ConsoleColor.printCyan("             CÓDIGO DE TRES DIRECCIONES OPTIMIZADO (TAC)              ");
             ConsoleColor.printCyan("======================================================================");
             System.out.print(optTacCode);
+            ConsoleColor.printCyan("======================================================================\n");
+            
+            // 9. Generación de Código Ensamblador MIPS & Asignación de Registros (Fase 5)
+            ConsoleColor.printCyan("Iniciando Generación de Código Ensamblador MIPS & Asignación de Registros (Fase 5)...");
+            
+            LivenessAnalyzer livenessAnalyzer = new LivenessAnalyzer(originalInstructions);
+            var intervals = livenessAnalyzer.computeIntervals();
+            
+            RegisterAllocator allocator = new RegisterAllocator(intervals, originalInstructions);
+            allocator.allocate();
+            allocator.printAllocationLog();
+            
+            MIPSCodeGenerator mipsGenerator = new MIPSCodeGenerator(
+                originalInstructions, 
+                allocator.getVarToReg(), 
+                allocator.getSpillOffsets(), 
+                semanticAnalyzer.getStructRegistry(), 
+                semanticAnalyzer.getVarTypesRegistry(), 
+                semanticAnalyzer.getFunctionParams(), 
+                allocator.getFrameSize()
+            );
+            mipsGenerator.generate();
+            String mipsCode = mipsGenerator.getMIPSCode();
+
+            // Guardar el código ensamblador en un archivo de salida (.s)
+            String mipsOutputFilePath = sourceFilePath.substring(0, sourceFilePath.lastIndexOf('.')) + ".s";
+            Files.writeString(Paths.get(mipsOutputFilePath), mipsCode);
+            ConsoleColor.printGreen("\n[ÉXITO] Fase 5 completada. Código Ensamblador MIPS generado con éxito.");
+            ConsoleColor.printGreen("Archivo ensamblador guardado en: " + mipsOutputFilePath);
+
+            // Imprimir el MIPS en la consola
+            ConsoleColor.printCyan("\n======================================================================");
+            ConsoleColor.printCyan("                      CÓDIGO ENSAMBLADOR MIPS                         ");
+            ConsoleColor.printCyan("======================================================================");
+            System.out.print(mipsCode);
             ConsoleColor.printCyan("======================================================================\n");
             
         } catch (IOException e) {

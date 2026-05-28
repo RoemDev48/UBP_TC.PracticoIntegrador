@@ -18,6 +18,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
     private int loopNestingLevel;
     private Set<String> initializedVars;
     private final Map<String, List<VarDeclNode>> structRegistry;
+    private final Map<String, String> varTypesRegistry;
     
     private final List<String> errors;
     private final List<String> warnings;
@@ -30,7 +31,22 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
         this.warnings = new ArrayList<>();
         this.initializedVars = new HashSet<>();
         this.structRegistry = new HashMap<>();
+        this.varTypesRegistry = new HashMap<>();
     }
+
+    public Map<String, String> getVarTypesRegistry() {
+        return varTypesRegistry;
+    }
+
+    public Map<String, List<VarDeclNode>> getStructRegistry() {
+        return structRegistry;
+    }
+
+    public Map<String, List<String>> getFunctionParams() {
+        return functionParams;
+    }
+
+    private final Map<String, List<String>> functionParams = new HashMap<>();
 
     public List<String> getErrors() {
         return errors;
@@ -104,6 +120,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
             reportError(node, "Redeclaración del identificador '" + node.getIdentifier() + "' en el mismo ámbito.");
             return Type.ERROR;
         }
+        varTypesRegistry.put(node.getIdentifier(), node.getType() + (node.getPointerDepth() > 0 ? "*".repeat(node.getPointerDepth()) : ""));
 
         // Si tiene inicializador, validar compatibilidad de tipos
         if (node.hasInitializer()) {
@@ -129,6 +146,12 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
 
     @Override
     public Type visit(FuncDeclNode node) {
+        List<String> paramsList = new ArrayList<>();
+        for (ParameterNode p : node.getParameters()) {
+            paramsList.add(p.getIdentifier());
+        }
+        functionParams.put(node.getIdentifier(), paramsList);
+
         Type baseReturnType = Type.fromString(node.getReturnType());
         if (baseReturnType == Type.ERROR) {
             reportError(node, "Tipo de retorno desconocido '" + node.getReturnType() + "' en la función '" + node.getIdentifier() + "'.");
@@ -177,6 +200,7 @@ public class SemanticAnalyzer implements ASTVisitor<Type> {
                     reportError(param, "Nombre de parámetro duplicado '" + param.getIdentifier() + "' en la función '" + node.getIdentifier() + "'.");
                 }
                 initializedVars.add(param.getIdentifier());
+                varTypesRegistry.put(param.getIdentifier(), param.getType() + (param.getPointerDepth() > 0 ? "*".repeat(param.getPointerDepth()) : ""));
             }
         }
 
