@@ -12,6 +12,7 @@ import compiler.utils.CompilerErrorListener;
 import compiler.utils.ConsoleColor;
 import compiler.visitor.ASTPrinter;
 import compiler.codegen.*;
+import compiler.optim.*;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.Token;
@@ -134,8 +135,8 @@ public class Main {
             ConsoleColor.printCyan("======================================================================\n");
 
             // 8. Optimización de Código Intermedio (Fase 4)
-            ConsoleColor.printCyan("Iniciando Optimización de Código Intermedio (Fase 4)...");
-            List<TACInstruction> optimizedInstructions = TACOptimizer.optimize(originalInstructions);
+            ControlFlowGraph optimCfg = new ControlFlowGraph(originalInstructions);
+            List<TACInstruction> optimizedInstructions = optimCfg.optimize();
             
             // Construir el string del código optimizado
             StringBuilder optSb = new StringBuilder();
@@ -160,15 +161,15 @@ public class Main {
             // 9. Generación de Código Ensamblador MIPS & Asignación de Registros (Fase 5)
             ConsoleColor.printCyan("Iniciando Generación de Código Ensamblador MIPS & Asignación de Registros (Fase 5)...");
             
-            LivenessAnalyzer livenessAnalyzer = new LivenessAnalyzer(originalInstructions);
+            LivenessAnalyzer livenessAnalyzer = new LivenessAnalyzer(optimizedInstructions);
             var intervals = livenessAnalyzer.computeIntervals();
             
-            RegisterAllocator allocator = new RegisterAllocator(intervals, originalInstructions);
+            RegisterAllocator allocator = new RegisterAllocator(intervals, optimizedInstructions);
             allocator.allocate();
             allocator.printAllocationLog();
             
             MIPSCodeGenerator mipsGenerator = new MIPSCodeGenerator(
-                originalInstructions, 
+                optimizedInstructions, 
                 allocator.getVarToReg(), 
                 allocator.getSpillOffsets(), 
                 semanticAnalyzer.getStructRegistry(), 

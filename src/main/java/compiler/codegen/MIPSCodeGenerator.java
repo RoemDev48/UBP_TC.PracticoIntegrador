@@ -279,6 +279,14 @@ public class MIPSCodeGenerator {
      * Guarda el valor contenido en un registro físico de MIPS en la variable o temporal correspondiente de TAC.
      */
     private void storeVal(String srcReg, String val) {
+        // Si es una escritura a un puntero desreferenciado (ej: *p = srcReg)
+        if (val != null && val.startsWith("*")) {
+            String ptrVar = val.substring(1);
+            loadVal(ptrVar, "$t8");
+            textSection.append("    sw ").append(srcReg).append(", 0($t8)\n");
+            return;
+        }
+
         String base = getBaseVar(val);
         String member = getMemberName(val);
 
